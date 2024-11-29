@@ -180,36 +180,6 @@ def random_forest(X_train, X_test, Y_train, Y_test):
     print(f'RF F1 Score: {f1:.2f}')
     print(f'RF AUC: {auc:.2f}')
 
-    # Create LIME explainer
-    explainer = LimeTabularExplainer(
-        training_data=X_train.values,
-        feature_names=X_train.columns.tolist(),
-        class_names=['Not Readmitted (0)', 'Readmitted (1)'],
-        mode='classification'
-    )
-
-    # Explain misclassified instances using LIME
-    for index in misclassified_indices[:3]:  # Limit to first 5 misclassifications
-        instance = X_test.iloc[index]
-        true_label = Y_test.iloc[index]
-        predicted_label = y_pred[index]
-        exp = explainer.explain_instance(instance, rf.predict_proba)
-        
-        print(f'\nExplanation for misclassified instance {index}:')
-        print(f'True label: {true_label}, Predicted label: {predicted_label}')
-        print("Top features contributing to the prediction:")
-        for feature, value in exp.as_list():
-            print(f"{feature}: {value}")
-            
-            # Visualize the explanation
-        # Visualize the explanation
-    fig = plt.figure(figsize=(10, 6))
-    exp.as_pyplot_figure()
-    plt.title(f'LIME Explanation for Instance {index}')
-    plt.tight_layout()
-    plt.savefig(f'lime_explanation_instance_{index}.png')
-    plt.show()
-
     return rf, y_pred
     
 def xgboost(X_train, X_test, Y_train, Y_test):
@@ -609,23 +579,23 @@ print("Combined DataFrame with SHAP values saved.")
 # Example new data
 new_data = {
 'race': 2,
-'gender': 1,
-'age': 95,
-'admission_type_id': 0,
+'gender': 0,
+'age': 45,
+'admission_type_id': 1,
 'discharge_disposition_id': 0,
-'admission_source_id': 2,
-'time_in_hospital': 4,
-'num_lab_procedures': 42,
-'num_procedures': 0,
-'num_medications': 15,
-'diag_1': 0,
-'diag_2': 0,
-'diag_3': 0,
-'number_diagnoses': 9,
+'admission_source_id': 0,
+'time_in_hospital': 2,
+'num_lab_procedures': 32,
+'num_procedures': 1,
+'num_medications': 11,
+'diag_1': 2,
+'diag_2': 7,
+'diag_3': 7,
+'number_diagnoses': 6,
 'A1Cresult': 1,
 'change': 0,
 'diabetesMed': 0,
-'service_utilization': 0,
+'service_utilization': 2,
 'medication_change_count': 0
 }
 
@@ -688,49 +658,11 @@ print("RF prediction:", y_pred_newdata)
 print("RF prediction probability:", y_pred_newdata_prob)
 
 # Step 10: Print results
-print(f"KNN Prediction based on SHAP values: {knn_prediction}")
 print(f"Nearest neighbors outcomes: {nearest_neighbors_outcomes.tolist()}")
 # Print distances of the nearest neighbors
 print(f"Distances of nearest neighbors: {distances[0].tolist()}")
 
 ############################# feature importance
-
-def shap_force_plot():
-    # Convert SHAP values to a numpy array
-    shap_values = shap_df_newdata.values
-
-    # Get feature names
-    feature_names = shap_df_newdata.columns.tolist()
-
-    # Get the base value (expected value)
-    base_value = explainer.expected_value
-    if isinstance(base_value, (list, np.ndarray)):
-        base_value = base_value[1]  # Assuming we're interested in class 1 (adjust if needed)
-
-    # Select top 5-6 features by absolute SHAP values
-    top_n = 6  # Change this to 5 if you want exactly 5 features
-    shap_values_instance = shap_values[0]
-    top_features_idx = np.argsort(np.abs(shap_values_instance))[-top_n:]  # Get indices of top features
-
-    # Filter SHAP values, feature names, and data to include only the top features
-    top_shap_values = shap_values_instance[top_features_idx]
-    top_feature_names = [feature_names[i] for i in top_features_idx]
-    top_data = new_data_scaled_df.values[0][top_features_idx]
-
-    # Create an Explanation object with only the top features
-    explanation = shap.Explanation(
-    values=top_shap_values,
-    base_values=base_value,
-    data=top_data,
-    feature_names=top_feature_names
-    )
-
-    # Create the force plot
-    shap.plots.force(explanation, matplotlib=True)
-    plt.title("SHAP Force Plot - Top Features")
-    plt.tight_layout()
-    plt.show()
-
 def summary_plot():
     # Calculate the mean absolute SHAP values for each feature across the dataset
     mean_abs_shap_values = np.abs(shap_values_newdata[1]).mean(axis=0)
@@ -768,67 +700,70 @@ def shap_waterfall_plot():
 
     # Plot the waterfall plot
     shap.plots.waterfall(explanation)
-    plt.title("SHAP Waterfall Plot for Single Prediction")
-    plt.tight_layout()
-    plt.show()
     
 ################################################## validation of prediction
 
 rf_prediction = y_pred_newdata
 prob_confidence = y_pred_newdata_prob[0]
+
 objections = []
 
 if rf_prediction[0] != knn_prediction:
     if rf_prediction[0] == 0:
         if prob_confidence[0] > 0.70:  # 70% confidence for class 0
-            if any(distance < 2.0 for distance in distances[0]):
+            if any(distance < 1.7 for distance in distances[0]):
                 objections.append("OBJECTION Raised")
-                shap_force_plot()
                 summary_plot()
+                shap_waterfall_plot()
                 
             else:
                 objections.append("NO OBJECTION Raised")
         else:
                 objections.append("OBJECTION Raised")
-                shap_force_plot()
                 summary_plot()
+                shap_waterfall_plot()
 
     elif rf_prediction[0] == 1:
-        if prob_confidence[0] > 0.70:  # 70% confidence for class 0
-            if any(distance < 2.0 for distance in distances[0]):
+        if prob_confidence[1] > 0.70:  # 70% confidence for class 0
+            if any(distance < 1.7 for distance in distances[0]):
                 objections.append("OBJECTION Raised")
-                shap_force_plot()
                 summary_plot()
+                shap_waterfall_plot()
 
             else:
                 objections.append("NO OBJECTION Raised")
         else:
                 objections.append("OBJECTION Raised")
-                shap_force_plot()
                 summary_plot()
+                shap_waterfall_plot()
 
 if rf_prediction[0] == knn_prediction:
     if rf_prediction[0] == 0:
         if prob_confidence[0] > 0.70:  # 70% confidence for class 0
-            if any(distance < 2.0 for distance in distances[0]):
+            if any(distance < 1.7 for distance in distances[0]):
                 objections.append("OBJECTION Raised")
+                summary_plot()
+                shap_waterfall_plot()
             else:
                 objections.append("NO OBJECTION Raised")
-                shap_force_plot()
-                summary_plot()
         else:
             objections.append("OBJECTION Raised")
+            summary_plot()
+            shap_waterfall_plot()
 
     elif rf_prediction[0] == 1:
-        if prob_confidence[0] > 0.70:  # 70% confidence for class 0
-            if any(distance < 2.0 for distance in distances[0]):
+        if prob_confidence[1] > 0.70:  # 70% confidence for class 0
+            if any(distance < 1.7 for distance in distances[0]):
                 objections.append("OBJECTION Raised")
+                summary_plot()
+                shap_waterfall_plot()
             else:
                 objections.append("NO OBJECTION Raised")
-                shap_force_plot()
                 summary_plot()
         else:
             objections.append("OBJECTION Raised")
+            summary_plot()
+            shap_waterfall_plot()
 
                 
 # Print the objections
@@ -839,6 +774,7 @@ else:
     print("No objections raised.")
         
 ###############################################################
+
 """
 #Code to calculate distance measure
 # Assuming misclassified_X and X_train are already defined
@@ -875,22 +811,19 @@ plt.axvline(critical_threshold, color='b', linestyle='--', label=f'Critical Thre
 plt.legend()
 plt.show()
 
-# Print additional statistics
-print(f"Mean distance: {mean_distance}")
-print(f"Median distance: {median_distance}")
-print(f"Standard deviation of distances: {std_distance}")
-
 # Calculate percentiles
-percentiles = [25, 60, 65, 90, 95, 99]
+percentiles = [25, 60, 80, 90, 95, 99]
 for p in percentiles:
     print(f"{p}th percentile: {np.percentile(distances_flat, p):.2f}")
 
 # Count points within certain thresholds
-thresholds = [2, 2.5, 3]
+thresholds = [1.5, 1.7, 2]
 for t in thresholds:
     count = np.sum(distances_flat < t)
     percentage = (count / len(distances_flat)) * 100
     print(f"Points within distance {t}: {count} ({percentage:.2f}%)")
+    
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 # Step 1: Train Random Forest Model
 rf = RandomForestClassifier(random_state=42)
@@ -927,6 +860,7 @@ plt.show()
 
 #####################################################
 
+
 #calculation of prediction probability threshold
 # Step 1: Train Random Forest Model
 rf = RandomForestClassifier(random_state=42)
@@ -959,4 +893,5 @@ plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.legend(loc='lower right')
 plt.show()
+
 """
